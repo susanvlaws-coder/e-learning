@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Console - WalkMe Simulation</title>
+    <style>
+        :root {
+            --crm-header: #2b3042;
+            --crm-sidebar: #f5f7fa;
+            --crm-blue: #0070d2;
+            --crm-bg: #eef2f6;
+            --walkme-color: #2b76f5;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--crm-bg);
+            overflow: hidden; /* Prevent scrolling during tour */
+        }
+
+        /* --- MOCK CRM UI --- */
+        .crm-header {
+            background-color: var(--crm-header);
+            color: white;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-weight: 600;
+        }
+
+        .crm-container {
+            display: flex;
+            height: calc(100vh - 50px);
+        }
+
+        .crm-sidebar {
+            width: 220px;
+            background-color: var(--crm-sidebar);
+            border-right: 1px solid #d8dde6;
+            padding: 15px;
+        }
+
+        .sidebar-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            color: #555;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        .sidebar-item.active {
+            background-color: #e1eaf7;
+            color: var(--crm-blue);
+            font-weight: 600;
+        }
+
+        .crm-main {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e5e5e5;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
+        }
+
+        .data-row {
+            display: flex;
+            margin-bottom: 12px;
+        }
+
+        .data-label { width: 120px; color: #777; font-size: 0.9rem; }
+        .data-value { font-weight: 500; color: #333; }
+
+        /* Buttons & Inputs */
+        .btn {
+            background-color: white;
+            border: 1px solid #dddbda;
+            color: #0070d2;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .btn:hover { background-color: #f4f6f9; }
+        
+        .btn-primary {
+            background-color: var(--crm-blue);
+            color: white;
+            border: none;
+        }
+        .btn-primary:hover { background-color: #005fb2; }
+
+        select, input[type="text"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #dddbda;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+
+        /* --- WALKME OVERLAY STYLES --- */
+        
+        /* The dark overlay that dims the background */
+        .walkme-overlay-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 999;
+            pointer-events: none; /* Let clicks pass through initially */
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .walkme-overlay-backdrop.active {
+            opacity: 1;
+            pointer-events: auto; /* Block clicks everywhere */
+        }
+
+        /* The 'Hole' in the overlay - simulated by high z-index on target */
+        .walkme-target-highlight {
+            position: relative;
+            z-index: 1001 !important;
+            background: white; /* Ensure bg is white so it pops */
+            box-shadow: 0 0 0 4px var(--walkme-color), 0 0 15px rgba(0,0,0,0.5);
+            pointer-events: auto; /* Allow clicking this element */
+            border-radius: 4px;
+            transition: box-shadow 0.3s;
+        }
+
+        /* The Bubble/Tooltip */
+        .walkme-bubble {
+            position: absolute;
+            width: 280px;
+            background: white;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            z-index: 1002;
+            font-size: 14px;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .walkme-bubble.visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .walkme-bubble::after {
+            content: '';
+            position: absolute;
+            border-style: solid;
+            /* Arrow logic handled in JS or simplified here */
+        }
+
+        .walkme-bubble h4 { margin: 0 0 8px 0; color: var(--walkme-color); }
+        .walkme-bubble p { margin: 0 0 15px 0; color: #555; line-height: 1.4; }
+
+        .walkme-steps { font-size: 11px; color: #999; float: left; margin-top: 5px; }
+        
+        .walkme-next-btn {
+            background-color: var(--walkme-color);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            float: right;
+            font-size: 12px;
+        }
+
+        /* Success Screen */
+        .success-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            text-align: center;
+            z-index: 2000;
+            display: none;
+        }
+        .success-modal h2 { color: #2e8b57; }
+
+        /* --- Hidden Panels for Interaction --- */
+        #caseFormPanel { display: none; }
+        #creditPanel { display: none; }
+
+    </style>
+</head>
+<body>
+
+    <!-- MOCK CRM HEADER -->
+    <div class="crm-header">
+        <div style="margin-right: 20px;">☁️ ServiceConsole</div>
+        <div style="font-size: 12px; opacity: 0.8;">Home / Order #12345</div>
+    </div>
+
+    <div class="crm-container">
+        <!-- SIDEBAR -->
+        <div class="crm-sidebar">
+            <div class="sidebar-item">Dashboard</div>
+            <div class="sidebar-item active">Orders</div>
+            <div class="sidebar-item">Customers</div>
+            <div class="sidebar-item">Tasks</div>
+        </div>
+
+        <!-- MAIN CONTENT area -->
+        <div class="crm-main">
+            
+            <!-- Customer Detail Card -->
+            <div class="card" id="customerCard">
+                <div class="section-title">Customer Details</div>
+                <div class="data-row"><div class="data-label">Name:</div><div class="data-value">Jane Doe</div></div>
+                <div class="data-row"><div class="data-label">Email:</div><div class="data-value">jane.doe@example.com</div></div>
+                <div class="data-row"><div class="data-label">Loyalty Tier:</div><div class="data-value">Gold Member</div></div>
+            </div>
+
+            <!-- Order Detail Card -->
+            <div class="card" id="orderCard">
+                <div class="section-title">
+                    Order #12345 
+                    <span style="float:right; font-size:12px; background:#e0e0e0; padding:2px 6px; border-radius:4px;">Delivered</span>
+                </div>
+                <div class="data-row"><div class="data-label">Item:</div><div class="data-value">Beige Sectional Sofa (Left Arm)</div></div>
+                <div class="data-row"><div class="data-label">Price:</div><div class="data-value">$1,299.00</div></div>
+                <div class="data-row"><div class="data-label">Delivery Date:</div><div class="data-value">Yesterday</div></div>
+                
+                <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top:15px;">
+                    <button id="btnLogCase" class="btn" onclick="openCaseForm()">Report Issue</button>
+                    <button class="btn">Track Shipment</button>
+                </div>
+            </div>
+
+            <!-- Dynamic Case Form (Hidden initially) -->
+            <div class="card" id="caseFormPanel">
+                <div class="section-title">New Case: Order #12345</div>
+                
+                <label style="font-size:12px; color:#666;">Reason for Contact</label>
+                <select id="caseReason">
+                    <option>-- Select --</option>
+                    <option>Missing Parts</option>
+                    <option value="damage">Item Damaged / Defective</option>
+                    <option>Wrong Item Sent</option>
+                </select>
+
+                <div id="empathySection" style="margin: 15px 0; background: #fff5f5; padding: 10px; border-left: 3px solid #d32f2f; display:none;">
+                    <label style="font-weight:bold; color:#d32f2f; font-size:13px;">⚠️ Empathy Check</label>
+                    <div style="font-size:12px; margin-bottom:5px;">The customer is upset. Have you validated their feelings?</div>
+                    <label style="font-size:12px;"><input type="checkbox" id="empathyCheck" onclick="enableResolution()"> "I have apologized and validated the customer's frustration."</label>
+                </div>
+
+                <div id="resolutionSection" style="opacity: 0.5; pointer-events: none;">
+                    <label style="font-size:12px; color:#666; margin-top:10px; display:block;">Resolution</label>
+                    <select id="resolutionType" onchange="checkResolution()">
+                        <option>-- Select --</option>
+                        <option>Return for Refund</option>
+                        <option value="repair">Schedule Repair Tech (Fastest)</option>
+                        <option>Send Replacement</option>
+                    </select>
+
+                    <div id="creditOption" style="margin-top:10px; display:none;">
+                        <button id="btnAddCredit" class="btn btn-primary" onclick="finishSimulation()">Apply $50 Inconvenience Credit</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- WALKME OVERLAY ELEMENTS -->
+    <div class="walkme-overlay-backdrop" id="backdrop"></div>
+    
+    <div class="walkme-bubble" id="bubble">
+        <h4 id="bubbleTitle">WalkMe Tip</h4>
+        <p id="bubbleText">Instruction goes here.</p>
+        <div class="walkme-steps" id="bubbleStep">Step 1 of 5</div>
+        <button class="walkme-next-btn" id="bubbleBtn" onclick="nextStep()">Next</button>
+    </div>
+
+    <!-- SUCCESS MODAL -->
+    <div class="success-modal" id="successModal">
+        <h2>🎉 Process Complete!</h2>
+        <p>You successfully navigated the CRM while applying the Empathy Model.</p>
+        <p><strong>Key Takeaway:</strong> You prioritized the Repair (Speed) and added Credit (Delight).</p>
+        <button class="btn btn-primary" onclick="location.reload()">Restart Simulation</button>
+    </div>
+
+<script>
+    // --- SIMULATION STATE ---
+    let currentTourStep = 0;
+    
+    // --- TOUR STEPS CONFIGURATION ---
+    // Target: ID of element to highlight. 
+    // Trigger: 'next' (button click) or 'click' (user must click the highlighted element)
+    const tourSteps = [
+        {
+            target: 'customerCard',
+            title: "Verify Customer",
+            text: "Before starting, always verify the customer's loyalty tier. Jane is a <b>Gold Member</b>, so we should prioritize her resolution.",
+            trigger: 'next',
+            position: 'right'
+        },
+        {
+            target: 'btnLogCase',
+            title: "Log the Issue",
+            text: "The customer mentioned the sofa is torn. Click <b>Report Issue</b> to start a ticket.",
+            trigger: 'click', // Wait for user to actually click the button
+            position: 'right'
+        },
+        {
+            target: 'caseReason',
+            title: "Categorize the Defect",
+            text: "Select <b>Item Damaged / Defective</b> from the dropdown menu.",
+            trigger: 'change', // Custom trigger handled in code
+            position: 'right'
+        },
+        {
+            target: 'empathySection',
+            title: "The Empathy Pause",
+            text: "Wait! Before fixing the problem, you must fix the mood. Check the box to confirm you've used an Empathy Statement.",
+            trigger: 'click-check',
+            position: 'left'
+        },
+        {
+            target: 'resolutionType',
+            title: "Choose the Solution",
+            text: "Jane needs the sofa for guests this weekend. Select <b>Schedule Repair Tech</b> as it is the fastest option.",
+            trigger: 'change-res',
+            position: 'left'
+        },
+        {
+            target: 'btnAddCredit',
+            title: "Surprise & Delight",
+            text: "To fully restore trust for a Gold Member, apply a small credit. Click the button to finish.",
+            trigger: 'click',
+            position: 'top'
+        }
+    ];
+
+    // --- TOUR LOGIC ---
+
+    function startTour() {
+        showStep(0);
+    }
+
+    function showStep(index) {
+        if(index >= tourSteps.length) return;
+        currentTourStep = index;
+        const step = tourSteps[index];
+        const targetEl = document.getElementById(step.target);
+        const bubble = document.getElementById('bubble');
+        const backdrop = document.getElementById('backdrop');
+
+        // 1. Activate Backdrop
+        backdrop.classList.add('active');
+
+        // 2. Highlight Target
+        // Remove highlight from all others first
+        document.querySelectorAll('.walkme-target-highlight').forEach(el => el.classList.remove('walkme-target-highlight'));
+        targetEl.classList.add('walkme-target-highlight');
+
+        // 3. Position Bubble
+        const rect = targetEl.getBoundingClientRect();
+        let top, left;
+
+        // Simple positioning logic
+        if(step.position === 'right') {
+            top = rect.top;
+            left = rect.right + 15;
+        } else if (step.position === 'left') {
+            top = rect.top;
+            left = rect.left - 310; // Bubble width + padding
+        } else if (step.position === 'top') {
+            top = rect.top - 150;
+            left = rect.left;
+        }
+
+        bubble.style.top = top + 'px';
+        bubble.style.left = left + 'px';
+        
+        // 4. Update Content
+        document.getElementById('bubbleTitle').innerText = step.title;
+        document.getElementById('bubbleText').innerHTML = step.text;
+        document.getElementById('bubbleStep').innerText = `Step ${index + 1} of ${tourSteps.length}`;
+
+        // 5. Configure Next Button
+        const btn = document.getElementById('bubbleBtn');
+        if(step.trigger === 'next') {
+            btn.style.display = 'block';
+            btn.onclick = () => nextStep();
+        } else {
+            btn.style.display = 'none'; // User must interact with UI to proceed
+        }
+
+        bubble.classList.add('visible');
+    }
+
+    function nextStep() {
+        currentTourStep++;
+        if(currentTourStep < tourSteps.length) {
+            showStep(currentTourStep);
+        } else {
+            // Tour Over
+            document.getElementById('backdrop').classList.remove('active');
+            document.getElementById('bubble').classList.remove('visible');
+        }
+    }
+
+    // --- MOCK UI INTERACTION FUNCTIONS ---
+
+    function openCaseForm() {
+        if(currentTourStep === 1) {
+            document.getElementById('caseFormPanel').style.display = 'block';
+            nextStep(); // Advance WalkMe
+        }
+    }
+
+    // Listen for Dropdown Change (Step 2)
+    document.getElementById('caseReason').addEventListener('change', function() {
+        if(this.value === 'damage' && currentTourStep === 2) {
+            document.getElementById('empathySection').style.display = 'block';
+            nextStep();
+        }
+    });
+
+    // Listen for Checkbox (Step 3)
+    function enableResolution() {
+        if(document.getElementById('empathyCheck').checked && currentTourStep === 3) {
+            document.getElementById('resolutionSection').style.opacity = '1';
+            document.getElementById('resolutionSection').style.pointerEvents = 'auto';
+            nextStep();
+        }
+    }
+
+    // Listen for Resolution Change (Step 4)
+    function checkResolution() {
+        const val = document.getElementById('resolutionType').value;
+        if(val === 'repair' && currentTourStep === 4) {
+            document.getElementById('creditOption').style.display = 'block';
+            nextStep();
+        }
+    }
+
+    function finishSimulation() {
+        document.getElementById('backdrop').classList.remove('active');
+        document.getElementById('bubble').classList.remove('visible');
+        document.getElementById('successModal').style.display = 'block';
+    }
+
+    // Initialize
+    window.onload = () => {
+        setTimeout(startTour, 1000); // Wait 1 sec before starting
+    }
+
+</script>
+
+</body>
+</html>
